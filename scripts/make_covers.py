@@ -21,15 +21,60 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 
 FONT_JA = "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc"   # 日文明朝
 FONT_CN = "/System/Library/Fonts/Hiragino Sans GB.ttc"    # 中文黑体
+# 标题衬线字体候选链 (path, ttc_index)。按顺序取**第一个能覆盖标题全部字符**的:
+#   日文明朝没有简体专用字形 (剑/说/讲…) —— 直接用会渲染成豆腐块 ☒ 且不报错。
+#   日文标题(函館の記憶)仍走明朝, 中文标题自动落到宋体, 两边都不牺牲。
+FONT_TITLE_CHAIN = [
+    (FONT_JA, 0),                                            # Hiragino Mincho ProN W3
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", 1),     # Songti SC Bold
+]
 V_W, V_H = 1242, 1656   # 竖 3:4
 H_W, H_H = 1440, 1080   # 横 4:3
 
 
-def pick_font(path, size):
+def pick_font(path, size, index=0):
     try:
-        return ImageFont.truetype(path, size)
+        return ImageFont.truetype(path, size, index=index)
     except OSError:
         return ImageFont.truetype(FONT_CN, size)
+
+
+def _glyph_bytes(font, ch):
+    m = font.getmask(ch)
+    if not m.size[0]:
+        return b""
+    return Image.frombytes("L", m.size, bytes(m)).tobytes()
+
+
+def _covers(font, text):
+    """字体是否覆盖 text 全部字符。
+
+    PIL 缺字时**静默画 .notdef 豆腐块**, getbbox/getmask 都照样返回尺寸, 所以不能靠
+    有没有 bbox 判断 —— 只能把每个字的位图跟一个保证缺失的码位 (U+FFFF) 比对。
+    """
+    probe = _glyph_bytes(font, "￿")
+    return all(_glyph_bytes(font, c) != probe
+               for c in set(text) if not c.isspace())
+
+
+def pick_title_font(size, text):
+    """标题字体 = 候选链里第一个能完整覆盖 text 的; 都不行则用最后一个并告警。"""
+    last = None
+    for path, idx in FONT_TITLE_CHAIN:
+        try:
+            f = ImageFont.truetype(path, size, index=idx)
+        except OSError:
+            continue
+        last = f
+        if _covers(f, text):
+            return f
+    if last is not None:
+        missing = "".join(sorted({c for c in text
+                                  if not c.isspace() and not _covers(last, c)}))
+        print(f"⚠ 标题字体候选链都缺字: {missing!r} —— 这些字会渲染成豆腐块, "
+              f"请在 FONT_TITLE_CHAIN 里补一个覆盖它们的字体")
+        return last
+    return ImageFont.truetype(FONT_CN, size)
 
 
 def shadow(dr, x, y, txt, font, fill, alpha=165):
@@ -100,12 +145,13 @@ def make_vertical(src, title, sub, tag, out, bias_x=.5):
         f = pick_font(FONT_CN, 40)
         shadow(d, (V_W-d.textlength(tag,font=f))/2, int(V_H*.085), tag,
                f, (230,224,212,235), 140)
-    ft = pick_font(FONT_JA, 128)
+    ft = pick_title_font(128, title)
     ty = int(V_H * .165)                      # 上三分之一
     tracked(d, title, ft, V_W/2, ty, (250,248,243,255))
     ly = ty + 128 + 54
-    d.line([(V_W/2-140, ly), (V_W/2+140, ly)], fill=(235,230,220,115), width=2)
+    # 分隔线只在有副标题时画: 没副标题还画, 它会单独横穿主体(实测压在发髻上)
     if sub:
+        d.line([(V_W/2-140, ly), (V_W/2+140, ly)], fill=(235,230,220,115), width=2)
         fs = pick_font(FONT_CN, 46)
         shadow(d, (V_W-d.textlength(sub,font=fs))/2, ly+40, sub, fs, (238,234,226,255), 145)
     Image.alpha_composite(img, ov).convert("RGB").save(out, "JPEG", quality=93, subsampling=0)
@@ -131,12 +177,12 @@ def make_horizontal(src, title, sub, tag, out, bias_x=.5):
         f = pick_font(FONT_CN, 34)
         shadow(d, (H_W-d.textlength(tag,font=f))/2, int(H_H*.055), tag,
                f, (228,222,210,225), 130)
-    ft = pick_font(FONT_JA, 104)
+    ft = pick_title_font(104, title)
     ty = int(H_H * .655)
     tracked(d, title, ft, H_W/2, ty, (250,248,243,255))
     ly = ty + 104 + 40
-    d.line([(H_W/2-120, ly), (H_W/2+120, ly)], fill=(235,230,220,110), width=2)
     if sub:
+        d.line([(H_W/2-120, ly), (H_W/2+120, ly)], fill=(235,230,220,110), width=2)
         fs = pick_font(FONT_CN, 40)
         shadow(d, (H_W-d.textlength(sub,font=fs))/2, ly+30, sub, fs, (238,234,226,255), 140)
     Image.alpha_composite(img, ov).convert("RGB").save(out, "JPEG", quality=93, subsampling=0)

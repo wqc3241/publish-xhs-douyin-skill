@@ -40,9 +40,8 @@ class H(http.server.BaseHTTPRequestHandler):
                 req = urllib.request.Request(d['url'][0], headers={'User-Agent': 'Mozilla/5.0'})
                 data = urllib.request.urlopen(req, timeout=60).read()
             open(os.path.join(ROOT, name), 'wb').write(data)
-            out = b"saved " + name.encode()
-            self.send_response(200); self._cors(); self.send_header("Content-Length", str(len(out))); self.end_headers()
-            self.wfile.write(out)
+            # 204: 顶层表单 POST 提交后浏览器原地不动 (200 会把 chatgpt 页面导航走 — 2026-08-03 教训)
+            self.send_response(204); self._cors(); self.end_headers()
         except Exception as e:
             out = ("ERR %r" % e).encode()
             self.send_response(500); self._cors(); self.send_header("Content-Length", str(len(out))); self.end_headers()

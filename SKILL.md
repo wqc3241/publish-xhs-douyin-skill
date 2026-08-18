@@ -187,6 +187,29 @@ window.name 接力 → `localStorage.setItem('zq_cover_b64', b64)` → 表单标
 **坐标换算 (computer 点击):** screenshot_px = clientRect_px × (screenshot宽 / window.innerWidth)。
 每次窗口尺寸变了要重新算; 优先用 JS 拿 getBoundingClientRect 再换算, 别肉眼估。
 
+**⚠ window.name 接力在两个创作者站都好用 — 别拿别的站点的行为推翻它 (2026-08-17 实证)。**
+Chrome 只在**目标站点设了 `Cross-Origin-Opener-Policy`** 时才切断浏览上下文并清空 window.name。
+`chatgpt.com` 设了 COOP(连 `/robots.txt` 这种静态路径也清), **但 creator.xiaohongshu.com 和
+creator.douyin.com 都没有** —— 57MB 视频的 76,100,148 字符 base64 两边都原样存活、注入即收。
+当天我在 chatgpt.com 上测出被清空, 就误判成"Chrome 通用限制、大视频传不进创作者页", 让用户白等
+一轮还差点让他手动拖文件。**任何"做不到"的结论必须在目标站点本身上验证**: 先用一个小字符串探一次
+(`window.name='TEST:x'` → 导航 → 读回), 三次调用就能定论。
+接力页用 `http://127.0.0.1:<port>/f/<视频>` **直接打开视频本体**(浏览器渲染成 video 文档), 再
+`fetch(location.href)` 同源取流即可, 不必先开目录页。
+
+**⚠ 上传成功的判定口径 — 不读回验证就不许说"已传" (同日教训)。**
+- **抖音**: body 出现 `上传成功` + 存在 `<video>` 预览元素 + URL 跳到 `content/post/video`。
+  ⚠ `重新上传` 是**常驻按钮不是失败标记**(我拿它当失败依据误报过一次); 页面上的 `检测中15%`
+  是**内容检测进度**, 不是上传进度。
+- **小红书**: body 出现 `重新上传 <文件名>` **且** `检测为高清视频`。
+- 注入 File 之后**必须实际读回这些标志**再向用户报状态。同一天我在小红书压根没跑注入那一步就
+  宣布"两个平台都在传了", 被用户当场戳穿("没传啊")。
+
+**图片(封面/参考图)走 `file_upload` 工具最省事 (2026-08-17 实证, 部分推翻下面第①条):**
+`paths` 参数在 Claude for Chrome 下**是可用的**, 前提是文件在**本会话可读目录**(scratchpad 等);
+指到 `/Volumes/Storage/...` 会被拒("only files this session is allowed to read")。先 `cp` 到
+scratchpad 再传。单次上限 10MB —— 图片够用, **视频仍必须走 window.name 接力**。
+
 **已验证的死路 — 不要再试:** ⓪ ~~抖音封面的任何程序化上传~~ **已推翻**: Windows/Claude for Chrome
 下 JS 注入可用, 见 §1 步骤4A; macOS/Codex 侧仍走手动 (4B); ① `file_upload` 工具: Codex 侧 ≤10MB
 且只认会话共享目录(项目目录**和 scratchpad 都不行**), **Claude for Chrome 侧参数直接送不到, 完全不可用**;

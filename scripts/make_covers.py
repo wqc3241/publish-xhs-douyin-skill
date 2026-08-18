@@ -94,6 +94,22 @@ def tracked(dr, txt, font, cx, y, fill, track_ratio=.30, alpha=175):
         x += ws[i] + tr
 
 
+def fit_title_font(dr, txt, base_size, max_w, track_ratio=.30):
+    """标题字号自适应: 缩到 tracked() 的整行宽度不超过 max_w 为止。
+
+    字号写死时长标题 (如「练习 vs UTR 6+」) 会被画出画面外, PIL 不报错也不换行,
+    首尾字直接被裁掉。返回 (font, size) —— size 供分隔线/副标题定位复用。
+    """
+    size = base_size
+    while size > 40:
+        f = pick_title_font(size, txt)
+        w = sum(dr.textlength(c, font=f) for c in txt) + int(size*track_ratio)*(len(txt)-1)
+        if w <= max_w:
+            return f, size
+        size -= 4
+    return pick_title_font(size, txt), size
+
+
 def blurred_bg(src, W, H, blur=45, bright=.38, sat=.7):
     sc = max(W/src.width, H/src.height) * 1.3
     bg = src.resize((int(src.width*sc), int(src.height*sc)), Image.LANCZOS)
@@ -145,10 +161,10 @@ def make_vertical(src, title, sub, tag, out, bias_x=.5):
         f = pick_font(FONT_CN, 40)
         shadow(d, (V_W-d.textlength(tag,font=f))/2, int(V_H*.085), tag,
                f, (230,224,212,235), 140)
-    ft = pick_title_font(128, title)
+    ft, tsize = fit_title_font(d, title, 128, V_W*.88)
     ty = int(V_H * .165)                      # 上三分之一
     tracked(d, title, ft, V_W/2, ty, (250,248,243,255))
-    ly = ty + 128 + 54
+    ly = ty + tsize + 54
     # 分隔线只在有副标题时画: 没副标题还画, 它会单独横穿主体(实测压在发髻上)
     if sub:
         d.line([(V_W/2-140, ly), (V_W/2+140, ly)], fill=(235,230,220,115), width=2)
@@ -177,10 +193,10 @@ def make_horizontal(src, title, sub, tag, out, bias_x=.5):
         f = pick_font(FONT_CN, 34)
         shadow(d, (H_W-d.textlength(tag,font=f))/2, int(H_H*.055), tag,
                f, (228,222,210,225), 130)
-    ft = pick_title_font(104, title)
+    ft, tsize = fit_title_font(d, title, 104, H_W*.86)
     ty = int(H_H * .655)
     tracked(d, title, ft, H_W/2, ty, (250,248,243,255))
-    ly = ty + 104 + 40
+    ly = ty + tsize + 40
     if sub:
         d.line([(H_W/2-120, ly), (H_W/2+120, ly)], fill=(235,230,220,110), width=2)
         fs = pick_font(FONT_CN, 40)

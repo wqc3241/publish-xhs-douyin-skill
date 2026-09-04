@@ -17,7 +17,8 @@ Battle-tested 2026-07-23 (郑钦文项目, 82MB 2:41 成片) / 2026-07-27 (函�
 2026-07-31 (《选拍指南》**7 期系列 × 双平台 = 14 篇**, 全程慢链路: 签名脚本下不来) /
 2026-08-01 (雪中舞剑, 71MB 26.6s 横版国风CG; 首屏慢+手动开页, 跨标签 IndexedDB 发成) /
 2026-08-04 (大坂直美, 双封面手动上传 + XHS 智能章节 + 关页恢复 + 双时区定时回归测试) /
-2026-08-08 (加拿大双城记, **Windows + Claude for Chrome 首次跑通抖音双封面全自动**, 双平台零人工)。
+2026-08-08 (加拿大双城记, **Windows + Claude for Chrome 首次跑通抖音双封面全自动**, 双平台零人工) /
+2026-09-01 (BU校队抢十 1:57 横版, 22Mbps原片 crf24 瘦到 28MB 双平台秒传; 封面改走 **web ChatGPT 生成**(原生3:4/4:3直出) → 页内 fetch→dataURL→剪贴板→pbpaste 收图; XHS「定时发布」按钮**首击即中**未犯 shadow-DOM 病; 抖音发布页章节被播放器死锁→无章节发布, 待用户 App 补)。
 
 **⚠ 分界线是浏览器, 不是操作系统**: 抖音封面在 **Claude for Chrome 下可以 JS 注入自动完成**
 (Windows 2026-08-08 / macOS 2026-08-09 均实测通过), 在 **Codex in-app Browser 下必须用户手动传**
@@ -197,6 +198,23 @@ creator.douyin.com 都没有** —— 57MB 视频的 76,100,148 字符 base64 �
 接力页用 `http://127.0.0.1:<port>/f/<视频>` **直接打开视频本体**(浏览器渲染成 video 文档), 再
 `fetch(location.href)` 同源取流即可, 不必先开目录页。
 
+**⚠ 2026-09-04 更新: 抖音全站加了 `Cross-Origin-Opener-Policy: same-origin` (+COEP credentialless), window.name
+接力对 creator.douyin.com 失效** —— `/creator-micro/content/upload`、`/robots.txt`、`/favicon.ico`、任意静态路径全部回
+带 COOP 的 SPA HTML (`curl -sI` 可验), 落地后 window.name 必为空; 小红书没加 COOP, 接力照常 (93MB / 1.25 亿字符实测存活)。
+抖音视频改走 **macOS 系统剪贴板文件粘贴** (当天 93.6MB 一次通, 零人工):
+① `osascript -e 'set the clipboard to (POSIX file "/绝对路径/成片.mp4")'` 把文件引用放上剪贴板 (`clipboard info` 应见 furl);
+② 抖音上传页 JS: `window.addEventListener('paste',e=>{const fs=e.clipboardData&&e.clipboardData.files;
+   if(fs&&fs.length){window.__PF=Array.from(fs);e.preventDefault();e.stopImmediatePropagation();}},true)`, 再造一个
+   `position:fixed` 的 contenteditable div 并 `focus()` —— **paste 事件只在可编辑焦点上触发**, body 焦点下计数为 0;
+③ **必须是系统级真实按键**: `osascript` 让 Chrome `activate` 并把抖音标签设为 active tab (遍历 windows/tabs 按 URL
+   `set active tab index`), 再 `tell application "System Events" to tell process "Google Chrome" to keystroke "v"
+   using command down`。扩展的 `computer key cmd+v` 走 CDP **不触发编辑命令**, 实测 paste 计数 0, 别再试;
+④ 回页面 `window.__PF[0]` 是真 File (size 与本地一致) → DataTransfer → `input[type=file]` → change; 成功判据同上
+   (URL 跳 post/video, `<video>` readyState 4 且 duration 对上)。粘贴区 div 用完 remove。
+封面图片不用这套: `file_upload` 塞 scratchpad 路径即可。**抖音封面弹窗的画布 input 在竖/横两个页签下是同一个**
+(aria-label 打标后确认: 当前页签「上传封面」按钮祖先里的那个 input), `find` 返回的第二个「上传封面」ref 实为 AI 参考图
+input (灌进去封面会变成参考图缩略图) —— 注入前用 JS 顺着可见「上传封面」按钮的祖先找 input 并打 aria-label, 再 find 该标签。
+
 **⚠ 上传成功的判定口径 — 不读回验证就不许说"已传" (同日教训)。**
 - **抖音**: body 出现 `上传成功` + 存在 `<video>` 预览元素 + URL 跳到 `content/post/video`。
   ⚠ `重新上传` 是**常驻按钮不是失败标记**(我拿它当失败依据误报过一次); 页面上的 `检测中15%`
@@ -231,6 +249,7 @@ Local Network Access 会让页内 localhost fetch 无限挂起; ④ python http.
 **流程:**
 1. 视频: make_relay 返回 URL 设为 `https://creator.douyin.com/creator-micro/content/upload`
    → 接力 → 注入 input[type=file] → 秒收并自动跳发布表单。
+   **2026-09-04 起抖音 COOP 让接力失效 → 改 §0 的剪贴板文件粘贴四步**, 注入后同样秒收跳表单。
 2. **标题/简介 (editor-kit 极难伺候):** 唯一稳的输入法 = 精确坐标点击聚焦 → `cmd+A`+`Backspace`
    真键盘清场 → `computer type` 打字。禁 execCommand (React 回滚 + 幽灵 token: "郑钦暖"、
    "育人物"复活)。回车在简介里**不产生换行** (章节别写简介里 — 用章节功能)。
@@ -263,7 +282,10 @@ Local Network Access 会让页内 localhost fetch 无限挂起; ④ python http.
       **⚠ 还有一个同类陷阱 (2026-08-09 macOS 实测踩到)**: 页面上 AI 封面「生成参考图」也有
       image input —— 注错进去图会**变成 AI 参考图**、封面槽保持黑。定位正确 input 的口径:
       ancestor innerText 含「上传封面|点击上传文件或拖拽文件到这里」; AI 参考图那个的 ancestor
-      是「生成参考图|智能参考|AI生成封面」。
+      是「生成参考图|智能参考|AI生成封面」。**2026-09-01 补充**: 画布真输入有两个(竖/横画布
+      各一), 祖先文案一模一样没法静态区分 — 注入后必须截图验画布, 没变就换另一个 idx;
+      find 工具给这些 input 的"竖/横封面"描述不可信 (实测把参考图 input 标成了竖封面弹窗输入)。
+      封面文件放 scratchpad 走 file_upload 也能送达 input (免接力), 但送错 input 同样无效。
    4. **切到「设置横封面」页签时平台会弹「已优先同步竖封面底图和素材」**, 把竖图按 4:3
       裁掉上下 —— 标题整条被切走。必须在横页签**再灌一次真正的 4:3 图**。
    5. **弹窗出口是右下角「完成」, 不是右上角 ×** (点 × 会弹「你有未保存的封面编辑效果, 是否关闭?」,
@@ -297,8 +319,17 @@ Local Network Access 会让页内 localhost fetch 无限挂起; ④ python http.
    (含播放器和时间轴, 与 2026-07 "video-cn.douyin.com 死加载"的观察相反 — 先试发布页, 不行再走
    内容管理→编辑页), 或选智能章节。手动加法: 点时间轴目标位置 → 手动添加 → 填名(≤12字) → 确定;
    加错时刻不用删, **每行的时刻数字可直接 triple_click 改**(比重新定位播放头快)。
+   (2026-09-04 新版「章节锚点」弹窗: 列表里的时刻是纯文本, triple_click 只会选中行并跳播放头; 要点行右侧**铅笔**进
+   行内编辑, mm/ss 两个小 input 各 triple_click+type, 再点行右侧「确认」; 「手动添加」的内联表单固定在时间轴下方,
+   三条章节可在一个 batch 里连做, 最后逐行核对。)
    - **短视频压根没有章节入口**: 26.6s 的片子上传时「扩展信息 → 视频章节」还在, **视频处理完成后
      整行消失**。别当成 bug 去找。配合用户规则(<1分钟不加章节), 短片直接跳过这步。
+   - **⚠ 发布页章节也可能被「请等待视频加载完成」永久门禁 (2026-09-01 实测)**: 上传完成后
+     弹窗播放器拉的是服务端流 (video 元素 blob src 永远 readyState=0), 关开弹窗、等 30 分钟
+     均无效 — 与「发布页播放器吃客户端本地文件」的旧观察相反 (那可能只在上传未完成时成立)。
+     「智能生成」对无语音的纯运动视频也直接回「自动生成章节失败, 可手动添加」(和 XHS 的
+     「内容信息量不足」同源)。两路全死时: 定时照发, 把章节时刻表交给用户在手机 App
+     编辑作品→章节 30 秒补, 或接受该条无章节 — 别为章节卡整个发布。
    - **⚠ 定时作品事后补章节大概率做不到 (2026-08-30 定论)**: 编辑页章节弹窗的预览播放器拉
      `video-cn.douyin.com`, 该域从本机网络**常量级不通**(performance 里连资源条目都没有;
      60s+ 等待/整页重载换边缘/给 video 元素换本地 blob 全部无效——React 播放器接管加载,
@@ -376,6 +407,14 @@ const t=document.body.innerText;
      重新触发一次搜索。这是慢链路下最有效的一招 (见 §2.1)。
    - **凑不齐时用编辑器下方那排「推荐话题」chips**: 随笔记预加载, 点一下立刻变真话题,
      完全不走搜索接口, 零等待。内容相关时 (如 #网球) 是合格替补。
+   - **查询词用 `execCommand('insertText')` 打, 比 computer type 稳 (2026-08-31 老德项目实证)**:
+     type 会吞数字/生僻字 (`#2026美网` 落成 `#美网`、`鏖`→`鳌`), insertText 全字符保真且照常触发
+     tiptap 下拉。流程: 点「话题」按钮插 # → 同一 JS 里 `document.execCommand('insertText',false,'词')`
+     → 等下拉 → 按文字点行。XHS 删残留文本也用 `Range 选区 + execCommand('delete')` (真键 Backspace
+     对 XHS 编辑器时常无效, 对抖音编辑器有效)。
+   - **抖音简介的 JS 置尾不生效 (React 自管选区)**: 修完中段文字后直接 type 话题会插进原光标处。
+     必须先 `computer left_click` 点到文末空白处再打话题; 抖音编辑器错字修复可用
+     Range 选中单字 + type 正确字 (type 会替换选区)。
    **修复残留纯文本话题:** TreeWalker 找含 `#xx` 且不含 `[话题]` 的文本节点 → Range 精确选中 →
    真键 `Backspace` → 重打 → 等下拉 → 点击条目。
 5. **⭐ 添加章节 (趁现在, 首发唯一窗口 —— 但 <1分钟的片子按用户规则直接跳过):**
@@ -394,6 +433,12 @@ const t=document.body.innerText;
      timeline-graduation), >1 分钟的片子可见区只有开头一段。
    - 每行 = `mm` `ss` `章节名称` `章节描述`(可空)。**行高 50px**, 列表**只显示 3 行就开始滚动** ——
      第 4 行起必须先 `scroll` 再点, 否则点在列表外面(实测第 4 条名字没打进去)。
+   - **⚠ 章节行列表按时刻实时重排 (2026-09-01 实测)**: 改任何一行的时刻, 列表立即按时间重新
+     排序, 行会在你脚下换位置 — 批量 JS 连写必乱 (行错位、名称丢失)。正解: **先填名字**
+     (名字跟着行走), 再按名字定位逐行改时间, 并挑不产生越位的中间值顺序 (每步改完的时刻仍落在
+     原相邻两行之间)。名称/时刻输入框都吃 triple_click+type; 原生 setter 也行但必须逐行读回。
+     另: 视频处理期渲染主线程很忙, >2s 的页内 JS 循环会撞 CDP 45s 超时且**循环残留迟到生效**
+     (僵尸写入过几十秒才落进表单), 超时后先轻探现状再动手。
    - **清空章节**: 弹窗里有**两个「清空」**(上=内容总结, 下=章节列表), 清完**必须再点「保存章节」**
      才落库 —— 只清不保存, 关掉弹窗章节还在。清干净后主表单那行会从
      「已添加 N 个章节」变回「添加章节」。
@@ -412,6 +457,9 @@ const t=document.body.innerText;
      画布重排成整张竖图 → 再「确定」。**切完务必 zoom 看一眼**标题/角标都在画面内。
      (旧版本这里写「1242×1656 恰好 = 3:4 免裁剪」是错的 —— 比例对不代表默认选中。)
    - 「确定」转几秒 → 出「封面效果评估通过, 未发现封面质量问题」。
+   - **新版「设置封面」编辑器 (2026-09-01 起线上)**: 左侧栏变成 裁剪/模板/贴纸/文字/滤镜,
+     上传入口是「上传封面图片」file input (find 拿 ref → file_upload 塞 scratchpad 文件直达);
+     **比例开关藏进「裁剪」面板** (3:4/4:3/1:1), 仍默认 4:3 → 必须点 3:4; 出口是右下红色「完成」。
 8. **定时发布:** 更多设置 → 开 toggle → 时间输入框**明标「北京时间」**(语义就是北京时间, 别换算;
    默认值显示的是浏览器本地 now+1h, 是它家的 bug, 无视)。JS 赋值会被 React 回滚 — 真键盘打
    `YYYY-MM-DD HH:mm` → `Enter`; 日历面板会高亮日期+时分确认。
